@@ -1,0 +1,49 @@
+x-app-build: &app-build
+  context: .
+  args:
+    UID: ${UID:-1000}
+    GID: ${GID:-1000}
+
+services:
+  bot:
+    build: *app-build
+    image: asistente:local
+    container_name: asistente-bot
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./secrets:/app/secrets:ro      # el bot solo LEE el token
+    restart: unless-stopped
+    # Long polling: solo conexiones salientes. No se publica ningún puerto.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Herramienta de un solo uso para el flujo OAuth. No arranca con `up`.
+  #   docker compose --profile tools run --rm --service-ports google-auth
+  google-auth:
+    profiles: ["tools"]
+    build: *app-build
+    image: asistente:local
+    env_file: .env
+    command: ["python", "-m", "app.integrations.google_auth"]
+    volumes:
+      - ./secrets:/app/secrets         # aquí SÍ escribe: guarda token.json
+    ports:
+      - "127.0.0.1:8080:8080"          # solo loopback del servidor; se llega por túnel SSH
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
